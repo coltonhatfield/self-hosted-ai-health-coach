@@ -1,0 +1,17 @@
+# Ignore Environment Variables (API Keys)
+.env
+
+# Ignore SQLite Database (Your personal journal, foods, and AI logs)
+app/data/*.db
+
+# Ignore InfluxDB Data (Your personal Apple Health metrics)
+# Note: Adjust this path if your docker-compose mounts the influx volume differently
+influx_data/
+grafana_data/
+
+# Ignore Python Caches
+__pycache__/
+*.pyc
+
+# Ignore OS files
+.DS_Store

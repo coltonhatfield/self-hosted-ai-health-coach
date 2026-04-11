@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Food Tracker</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background-color: #121212; color: #fff; padding: 15px; max-width: 500px; margin: 0 auto; }
+        .tabs { display: flex; margin-bottom: 20px; font-size: 0.9em; }
+        .tab { flex: 1; text-align: center; padding: 10px 5px; background: #2c2c2c; cursor: pointer; border-bottom: 2px solid transparent; }
+        .tab.active { border-bottom: 2px solid #0a84ff; font-weight: bold; }
+        .content { display: none; }
+        .content.active { display: block; }
+        input[type="text"], input[type="number"], input[type="password"] { width: 100%; padding: 12px; margin: 6px 0 16px 0; background: #2c2c2c; border: 1px solid #444; color: white; border-radius: 8px; box-sizing: border-box; }
+        input[type="range"] { margin: 10px 0; accent-color: #0a84ff; }
+        button { width: 100%; padding: 14px; background: #0a84ff; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 10px; }
+        button:disabled { background: #3a3a3c; color: #8e8e93; }
+        button.success { background: #30d158; }
+        .macro-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .hidden { display: none; }
+        .history-card { background: #1e1e1e; padding: 12px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #0a84ff; }
+        .history-card h4 { margin: 0 0 5px 0; }
+        .history-card p { margin: 0; font-size: 0.85em; color: #aaa; }
+        .percentages { font-size: 0.8em; color: #30d158; margin-top: 5px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <label>API Key</label>
+    <input type="password" id="apiKey" placeholder="Enter API Key">
+
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('logTab')">Food</div>
+        <div class="tab" onclick="switchTab('workoutTab')">Workout</div>
+        <div class="tab" onclick="switchTab('journalTab')">Journal</div>
+        <div class="tab" onclick="switchTab('historyTab'); fetchHistory();">History</div>
+    </div>
+
+    <div id="logTab" class="content active">
+
+        <div class="history-card" style="border-left-color: #bf5af2; margin-bottom: 25px;">
+            <h4 style="color: #bf5af2;">🧠 Daily AI Coach</h4>
+            <p id="aiAdviceText" style="color: #fff; font-size: 0.95em; line-height: 1.4; margin-top: 5px;">Loading advice...</p>
+        </div>
+
+        <label>Option 1: Describe Food (Text)</label>
+        <input type="text" id="textInput" placeholder="e.g. 'A glass of coke and 2 eggs'">
+        <button id="analyzeTextBtn">Analyze Text</button>
+
+        <label style="display:block; text-align:center; margin:10px 0;">-- OR --</label>
+
+        <label>Option 2: Upload Photo</label>
+        <input type="file" id="imageInput" accept="image/*" style="margin-bottom:15px; width:100%;">
+        <button id="analyzeImgBtn" disabled>Analyze Photo</button>
+
+        <div id="status" style="text-align:center; margin:10px; color:#ff9f0a;"></div>
+
+        <div id="macroEditor" class="hidden">
+            <label>Item Name</label>
+            <input type="text" id="itemName" value="">
+            <div class="macro-grid">
+                <div><label>Calories</label><input type="number" id="calories"></div>
+                <div><label>Protein (g)</label><input type="number" id="protein"></div>
+                <div><label>Carbs (g)</label><input type="number" id="carbs"></div>
+                <div><label>Fats (g)</label><input type="number" id="fats"></div>
+            </div>
+            <button id="submitBtn" class="success">Log to Database</button>
+        </div>
+    </div>
+
+    <div id="workoutTab" class="content">
+        <div class="history-card" style="border-left-color: #ff453a;">
+            <h4 style="color: #ff453a;">⚡ Generate Libero Workout</h4>
+            
+            <label style="margin-top:15px; display:block;">How sore are you? (1-10)</label>
+            <input type="range" id="sorenessSlider" min="1" max="10" value="3" style="width:100%; accent-color: #ff453a;">
+            <div style="display:flex; justify-content:space-between; font-size:0.8em; color:#aaa;"><span>1 (Fresh)</span><span>10 (Crippled)</span></div>
+
+            <label style="margin-top:20px; display:block;">Energy Level? (1-10)</label>
+            <input type="range" id="energySlider" min="1" max="10" value="7" style="width:100%; accent-color: #ff453a;">
+            <div style="display:flex; justify-content:space-between; font-size:0.8em; color:#aaa; margin-bottom:20px;"><span>1 (Exhausted)</span><span>10 (Limitless)</span></div>
+
+            <button id="generateWorkoutBtn" style="background:#ff453a;">Build New Plan</button>
+            <div id="workoutResult" style="margin-top:15px; font-size:0.95em; line-height:1.5; color:#fff; white-space: pre-wrap;"></div>
+
+            <div id="adjustmentSection" class="hidden" style="margin-top: 20px; border-top: 1px solid #444; padding-top: 15px;">
+                <label style="color:#ff453a;">Adjust Workout</label>
+                <input type="text" id="wModification" placeholder="e.g., 'skip shoulders, wrist hurts'">
+                <button id="adjustWorkoutBtn" style="background:#3a3a3c; color:#fff; margin-top:5px;">Update Plan</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="journalTab" class="content">
+        <div class="history-card" style="border-left-color: #ffd60a;">
+            <h4 style="color: #ffd60a;">📝 Daily Check-In & Feedback</h4>
+            
+            <label style="margin-top:15px; display:block;">Overall Soreness (1-10)</label>
+            <input type="range" id="jSoreness" min="1" max="10" value="1" style="width:100%; accent-color: #ffd60a;">
+            
+            <label style="margin-top:10px; display:block;">Overall Energy (1-10)</label>
+            <input type="range" id="jEnergy" min="1" max="10" value="5" style="width:100%; accent-color: #ffd60a;">
+
+            <div class="macro-grid" style="margin-top:15px;">
+                <div><label>Volleyball Hours</label><input type="number" step="0.5" id="vballHours" value="0"></div>
+                <div><label>Intensity (1-10)</label><input type="number" id="vballIntensity" value="0"></div>
+            </div>
+
+            <label style="margin-top:10px; display:block;">Notes / Talk to AI Coach</label>
+            <input type="text" id="jNotes" placeholder="e.g. 'Leg day yesterday crushed me.'">
+
+            <button id="saveJournalBtn" style="background:#ffd60a; color:#000;">Save to AI Memory</button>
+            <div id="journalStatus" style="text-align:center; margin-top:10px; color:#ffd60a;"></div>
+        </div>
+    </div>
+
+    <div id="historyTab" class="content">
+        <div id="historyList">Loading...</div>
+    </div>
+
+    <script>
+        const apiKey = document.getElementById('apiKey');
+        if(localStorage.getItem('health_api_key')) apiKey.value = localStorage.getItem('health_api_key');
+        apiKey.addEventListener('change', () => {
+            localStorage.setItem('health_api_key', apiKey.value);
+            fetchAdvice();
+            fetchWorkout();
+        });
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            const activeTab = Array.from(document.querySelectorAll('.tab')).find(tab => tab.getAttribute('onclick').includes(tabId));
+            if(activeTab) activeTab.classList.add('active');
+        }
+
+        const populateMacros = (data) => {
+            document.getElementById('itemName').value = data.item_name || "Food Item";
+            document.getElementById('calories').value = data.calories || 0;
+            document.getElementById('protein').value = data.protein || 0;
+            document.getElementById('carbs').value = data.carbs || 0;
+            document.getElementById('fats').value = data.fats || 0;
+            document.getElementById('macroEditor').classList.remove('hidden');
+            document.getElementById('status').innerText = "Analysis complete! Edit if needed.";
+        }
+
+        // TEXT ANALYZE
+        document.getElementById('analyzeTextBtn').addEventListener('click', async () => {
+            if(!apiKey.value) return alert("Enter API Key");
+            document.getElementById('status').innerText = "Analyzing text...";
+            try {
+                const res = await fetch('/api/v1/parse-food-text', {
+                    method: 'POST', headers: { 'X-API-Key': apiKey.value, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: document.getElementById('textInput').value })
+                });
+                populateMacros(await res.json());
+            } catch (e) { document.getElementById('status').innerText = e.message; }
+        });
+
+        // IMAGE ANALYZE
+        const imgInput = document.getElementById('imageInput');
+        const imgBtn = document.getElementById('analyzeImgBtn');
+        imgInput.addEventListener('change', () => imgBtn.disabled = !imgInput.files.length);
+
+        imgBtn.addEventListener('click', async () => {
+            if(!apiKey.value) return alert("Enter API Key");
+            document.getElementById('status').innerText = "Analyzing image...";
+            const formData = new FormData();
+            formData.append("file", imgInput.files[0]);
+            try {
+                const res = await fetch('/api/v1/parse-food', {
+                    method: 'POST', headers: { 'X-API-Key': apiKey.value }, body: formData
+                });
+                populateMacros(await res.json());
+            } catch (e) { document.getElementById('status').innerText = e.message; }
+        });
+
+        // SUBMIT FOOD
+        document.getElementById('submitBtn').addEventListener('click', async () => {
+            document.getElementById('status').innerText = "Saving...";
+            const data = {
+                item_name: document.getElementById('itemName').value,
+                calories: parseInt(document.getElementById('calories').value),
+                protein: parseInt(document.getElementById('protein').value),
+                carbs: parseInt(document.getElementById('carbs').value),
+                fats: parseInt(document.getElementById('fats').value)
+            };
+            try {
+                await fetch('/api/v1/log-macros', {
+                    method: 'POST', headers: { 'X-API-Key': apiKey.value, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                document.getElementById('status').innerText = "✅ Saved!";
+                setTimeout(() => { document.getElementById('macroEditor').classList.add('hidden'); document.getElementById('status').innerText=""; document.getElementById('textInput').value=""; }, 2000);
+            } catch (e) { document.getElementById('status').innerText = e.message; }
+        });
+
+        // FETCH AI ADVICE
+        async function fetchAdvice() {
+            if(!apiKey.value) return;
+            try {
+                const res = await fetch('/api/v1/daily-advice', { headers: { 'X-API-Key': apiKey.value }});
+                const data = await res.json();
+                document.getElementById('aiAdviceText').innerText = data.advice;
+            } catch (e) { document.getElementById('aiAdviceText').innerText = "Failed to load coach data."; }
+        }
+
+        // FETCH WORKOUT ON LOAD
+        async function fetchWorkout() {
+            if(!apiKey.value) return;
+            try {
+                const res = await fetch('/api/v1/workout', { headers: { 'X-API-Key': apiKey.value }});
+                const data = await res.json();
+                if (data.workout_plan) {
+                    document.getElementById('workoutResult').innerHTML = data.workout_plan.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                    document.getElementById('adjustmentSection').classList.remove('hidden');
+                }
+            } catch (e) {}
+        }
+
+        // Initialize Fetchers
+        if(apiKey.value) {
+            fetchAdvice();
+            fetchWorkout();
+        }
+
+        // GENERATE OR ADJUST WORKOUT FUNCTION
+        async function triggerWorkoutGeneration(modification = null) {
+            if(!apiKey.value) return alert("Enter API Key");
+            const resultDiv = document.getElementById('workoutResult');
+            resultDiv.innerText = "Analyzing recent health strain and generating plan...";
+            
+            const data = {
+                soreness: parseInt(document.getElementById('sorenessSlider').value),
+                energy: parseInt(document.getElementById('energySlider').value)
+            };
+            if (modification) data.modification = modification;
+
+            try {
+                const res = await fetch('/api/v1/generate-workout', {
+                    method: 'POST', headers: { 'X-API-Key': apiKey.value, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const responseData = await res.json();
+                resultDiv.innerHTML = responseData.workout_plan.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                document.getElementById('adjustmentSection').classList.remove('hidden');
+                document.getElementById('wModification').value = ""; // Clear the input box
+            } catch (e) { resultDiv.innerText = e.message; }
+        }
+
+        // BUTTON LISTENERS FOR WORKOUT
+        document.getElementById('generateWorkoutBtn').addEventListener('click', () => triggerWorkoutGeneration());
+        document.getElementById('adjustWorkoutBtn').addEventListener('click', () => {
+            const modText = document.getElementById('wModification').value;
+            if(!modText) return alert("Please type an adjustment request first.");
+            triggerWorkoutGeneration(modText);
+        });
+
+        // SUBMIT JOURNAL
+        document.getElementById('saveJournalBtn').addEventListener('click', async () => {
+            if(!apiKey.value) return alert("Enter API Key");
+            document.getElementById('journalStatus').innerText = "Saving to memory...";
+            
+            const data = {
+                soreness: parseInt(document.getElementById('jSoreness').value),
+                energy: parseInt(document.getElementById('jEnergy').value),
+                vball_hours: parseFloat(document.getElementById('vballHours').value) || 0,
+                vball_intensity: parseInt(document.getElementById('vballIntensity').value) || 0,
+                notes: document.getElementById('jNotes').value || "No notes today."
+            };
+
+            try {
+                await fetch('/api/v1/journal', {
+                    method: 'POST', headers: { 'X-API-Key': apiKey.value, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                document.getElementById('journalStatus').innerText = "✅ Saved! The AI will remember this.";
+                setTimeout(() => { document.getElementById('journalStatus').innerText=""; document.getElementById('jNotes').value=""; }, 3000);
+            } catch (e) { document.getElementById('journalStatus').innerText = e.message; }
+        });
+
+        // FETCH HISTORY
+        async function fetchHistory() {
+            if(!apiKey.value) { alert("Please enter your API key first."); return; }
+            const list = document.getElementById('historyList');
+            list.innerHTML = "<p style='text-align:center;'>Loading...</p>";
+            try {
+                const res = await fetch('/api/v1/food-history', { headers: { 'X-API-Key': apiKey.value }});
+                if (!res.ok) throw new Error(`Server returned ${res.status}`);
+                const data = await res.json();
+                if (data.length === 0) { list.innerHTML = "<p style='text-align:center; color:#aaa; margin-top:20px;'>No food logged yet. Go eat something!</p>"; return; }
+                list.innerHTML = "";
+                data.forEach(item => {
+                    const d = new Date(item.timestamp + "Z");
+                    const totalMacros = item.protein + item.carbs + item.fats;
+                    const pPct = totalMacros ? Math.round((item.protein / totalMacros) * 100) : 0;
+                    const cPct = totalMacros ? Math.round((item.carbs / totalMacros) * 100) : 0;
+                    const fPct = totalMacros ? Math.round((item.fats / totalMacros) * 100) : 0;
+
+                    list.innerHTML += `
+                        <div class="history-card">
+                            <h4>${item.item_name} <span style="float:right;">${item.calories} kcal</span></h4>
+                            <p>${d.toLocaleDateString()} at ${d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                            <p>P: ${item.protein}g | C: ${item.carbs}g | F: ${item.fats}g</p>
+                            <div class="percentages">${pPct}% Protein | ${cPct}% Carbs | ${fPct}% Fat</div>
+                        </div>`;
+                });
+            } catch (e) { list.innerHTML = `<p style='text-align:center; color:#ff453a; margin-top:20px;'>Error: ${e.message}</p>`; }
+        }
+    </script>
+</body>
+</html>

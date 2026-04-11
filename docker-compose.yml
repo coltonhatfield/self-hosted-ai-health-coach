@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  influxdb:
+    image: influxdb:2.7
+    container_name: health_influxdb
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=TheGoats1234
+      - DOCKER_INFLUXDB_INIT_ORG=health_org
+      - DOCKER_INFLUXDB_INIT_BUCKET=health_metrics
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=07a21b0b12a2c38da4f3a8e238a03b8e6e9b505bcbf14b54da54f2bd858855f8
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: health_grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./app/data:/app/data # Mount SQLite DB for AI Text
+    restart: unless-stopped
+
+  backend:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: health_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app
+    env_file:
+      - .env
+    depends_on:
+      - influxdb
+    restart: unless-stopped
+
+volumes:
+  influxdb_data:
+  grafana_data:
