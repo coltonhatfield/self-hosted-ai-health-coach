@@ -23,4 +23,5 @@ This is a full-stack dashboard that pulls my Apple Health data, estimates macros
 1. Clone this repo.
 2. Rename `.env.example` to `.env` and drop in your API keys.
 3. Run `docker-compose up -d`.
-4. Point your Grafana data source to the Influx container and start building panels.
+4. Setup Shortcuts on iphone to send data from health app to server
+5. Point your Grafana data source to the Influx container and start building panels.
