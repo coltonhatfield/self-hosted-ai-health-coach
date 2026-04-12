@@ -59,11 +59,30 @@ def log_food_to_sqlite(item_name: str, calories: int, protein: int, carbs: int, 
               (now, item_name, calories, protein, carbs, fats))
     conn.commit()
 
-def get_food_log_from_sqlite():
+def get_food_log_from_sqlite(page: int = 1, limit: int = 10):
+    offset = (page - 1) * limit
     cursor = conn.cursor()
-    cursor.execute("SELECT timestamp, item_name, calories, protein, carbs, fats FROM food_log ORDER BY timestamp DESC LIMIT 50")
+    # Added 'id' to the SELECT statement and added LIMIT/OFFSET
+    cursor.execute("SELECT id, timestamp, item_name, calories, protein, carbs, fats FROM food_log ORDER BY timestamp DESC LIMIT ? OFFSET ?", (limit, offset))
     rows = cursor.fetchall()
-    return [{"timestamp": r[0], "item_name": r[1], "calories": r[2], "protein": r[3], "carbs": r[4], "fats": r[5]} for r in rows]
+    return [{"id": r[0], "timestamp": r[1], "item_name": r[2], "calories": r[3], "protein": r[4], "carbs": r[5], "fats": r[6]} for r in rows]
+
+def update_food_in_sqlite(entry_id: int, calories: int, protein: int, carbs: int, fats: int):
+    conn.execute("UPDATE food_log SET calories=?, protein=?, carbs=?, fats=? WHERE id=?", 
+                 (calories, protein, carbs, fats, entry_id))
+    conn.commit()
+
+def get_todays_macros() -> dict:
+    today = datetime.utcnow().strftime('%Y-%m-%d')
+    cursor = conn.cursor()
+    cursor.execute("SELECT SUM(calories), SUM(protein), SUM(carbs), SUM(fats) FROM food_log WHERE timestamp LIKE ?", (f"{today}%",))
+    row = cursor.fetchone()
+    return {
+        "calories": row[0] or 0, 
+        "protein": row[1] or 0, 
+        "carbs": row[2] or 0, 
+        "fats": row[3] or 0
+    }
 
 def get_trailing_7_days() -> str:
     data_summary = []

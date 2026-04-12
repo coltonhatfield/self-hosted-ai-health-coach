@@ -96,3 +96,34 @@ def generate_workout_plan(data_context: str, soreness: int, energy: int, journal
     except Exception as e:
         logger.error(f"Gemini Workout Error: {e}")
         return "Unable to generate workout today. Focus on light mobility and active recovery."
+
+def generate_next_meal_recommendation(macros: dict) -> str:
+    try:
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        prompt = f"""
+        Act as a sports nutritionist for a collegiate club volleyball libero.
+        So far today, the athlete has consumed: {macros['calories']} kcal, {macros['protein']}g protein, {macros['carbs']}g carbs, and {macros['fats']}g fats.
+        Based on these numbers, recommend a specific, actionable meal idea for their NEXT meal to keep their macros balanced and fuel explosive performance.
+        Keep the recommendation to 2-3 brief sentences.
+        """
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        logger.error(f"Gemini Meal Rec Error: {e}")
+        return "Keep up the good work! Make sure to balance your protein and carbs in your next meal."
+
+def coach_chat(message: str, history: list) -> str:
+    try:
+        # Reconstruct the chat history for Gemini
+        formatted_history = [{"role": "user" if h.role == "user" else "model", "parts": [h.text]} for h in history]
+        
+        model = genai.GenerativeModel(
+            'gemini-2.5-flash',
+            system_instruction="You are an elite strength and conditioning coach and personal trainer for a collegiate club volleyball libero. Keep your answers concise, practical, and highly conversational. Do not use markdown unless formatting a list."
+        )
+        chat = model.start_chat(history=formatted_history)
+        response = chat.send_message(message)
+        return response.text
+    except Exception as e:
+        logger.error(f"Gemini Chat Error: {e}")
+        return "Coach is currently offline. Rest up."

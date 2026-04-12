@@ -89,6 +89,17 @@
                 <button id="adjustWorkoutBtn" style="background:#3a3a3c; color:#fff; margin-top:5px;">Update Plan</button>
             </div>
         </div>
+        
+        <div class="history-card" style="border-left-color: #0a84ff; margin-top: 20px;">
+            <h4 style="color: #0a84ff;">💬 Chat with Coach</h4>
+            <div id="chatHistoryDiv" style="height: 150px; overflow-y: auto; background: #121212; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 0.9em;">
+                <div style="text-align:left; margin-bottom:10px;"><span style="background:#3a3a3c; padding:8px; border-radius:8px; display:inline-block;">What's up? Ready to train?</span></div>
+            </div>
+            <div style="display: flex; gap: 5px;">
+                <input type="text" id="chatInput" placeholder="Ask about your regimen..." style="margin: 0; flex: 1;">
+                <button onclick="sendChatMessage()" style="width: auto; padding: 0 15px; margin: 0;">Send</button>
+            </div>
+        </div>
     </div>
 
     <div id="journalTab" class="content">
@@ -176,7 +187,7 @@
             } catch (e) { document.getElementById('status').innerText = e.message; }
         });
 
-        // SUBMIT FOOD
+        // SUBMIT FOOD & GET RECOMMENDATION
         document.getElementById('submitBtn').addEventListener('click', async () => {
             document.getElementById('status').innerText = "Saving...";
             const data = {
@@ -187,12 +198,17 @@
                 fats: parseInt(document.getElementById('fats').value)
             };
             try {
-                await fetch('/api/v1/log-macros', {
+                const res = await fetch('/api/v1/log-macros', {
                     method: 'POST', headers: { 'X-API-Key': apiKey.value, 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
                 });
-                document.getElementById('status').innerText = "✅ Saved!";
-                setTimeout(() => { document.getElementById('macroEditor').classList.add('hidden'); document.getElementById('status').innerText=""; document.getElementById('textInput').value=""; }, 2000);
+                const responseData = await res.json();
+                
+                document.getElementById('macroEditor').classList.add('hidden');
+                document.getElementById('textInput').value=""; 
+                
+                // Show Next Meal Recommendation
+                document.getElementById('status').innerHTML = `✅ Saved!<br><br><strong>Coach Says:</strong> ${responseData.next_meal_recommendation}`;
             } catch (e) { document.getElementById('status').innerText = e.message; }
         });
 
@@ -203,10 +219,10 @@
                 const res = await fetch('/api/v1/daily-advice', { headers: { 'X-API-Key': apiKey.value }});
                 const data = await res.json();
                 document.getElementById('aiAdviceText').innerText = data.advice;
-            } catch (e) { document.getElementById('aiAdviceText').innerText = "Failed to load coach data."; }
+            } catch (e) {}
         }
 
-        // FETCH WORKOUT ON LOAD
+        // WORKOUT GEN
         async function fetchWorkout() {
             if(!apiKey.value) return;
             try {
@@ -219,13 +235,11 @@
             } catch (e) {}
         }
 
-        // Initialize Fetchers
         if(apiKey.value) {
             fetchAdvice();
             fetchWorkout();
         }
 
-        // GENERATE OR ADJUST WORKOUT FUNCTION
         async function triggerWorkoutGeneration(modification = null) {
             if(!apiKey.value) return alert("Enter API Key");
             const resultDiv = document.getElementById('workoutResult');
@@ -245,23 +259,44 @@
                 const responseData = await res.json();
                 resultDiv.innerHTML = responseData.workout_plan.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
                 document.getElementById('adjustmentSection').classList.remove('hidden');
-                document.getElementById('wModification').value = ""; // Clear the input box
+                document.getElementById('wModification').value = ""; 
             } catch (e) { resultDiv.innerText = e.message; }
         }
 
-        // BUTTON LISTENERS FOR WORKOUT
         document.getElementById('generateWorkoutBtn').addEventListener('click', () => triggerWorkoutGeneration());
         document.getElementById('adjustWorkoutBtn').addEventListener('click', () => {
-            const modText = document.getElementById('wModification').value;
-            if(!modText) return alert("Please type an adjustment request first.");
-            triggerWorkoutGeneration(modText);
+            triggerWorkoutGeneration(document.getElementById('wModification').value);
         });
 
-        // SUBMIT JOURNAL
+        // CHAT WITH COACH LOGIC
+        let chatHistory = [];
+        async function sendChatMessage() {
+            const input = document.getElementById('chatInput');
+            const text = input.value;
+            if(!text || !apiKey.value) return;
+            
+            const chatBox = document.getElementById('chatHistoryDiv');
+            chatBox.innerHTML += `<div style="text-align:right; margin-bottom:10px;"><span style="background:#0a84ff; padding:8px; border-radius:8px;">${text}</span></div>`;
+            input.value = "";
+            
+            chatHistory.push({role: "user", text: text});
+            
+            try {
+                const res = await fetch('/api/v1/coach-chat', {
+                    method: 'POST', headers: { 'X-API-Key': apiKey.value, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text, history: chatHistory.slice(-6) }) // Keep last 6 messages
+                });
+                const data = await res.json();
+                chatHistory.push({role: "model", text: data.reply});
+                chatBox.innerHTML += `<div style="text-align:left; margin-bottom:10px;"><span style="background:#3a3a3c; padding:8px; border-radius:8px; display:inline-block;">${data.reply}</span></div>`;
+                chatBox.scrollTop = chatBox.scrollHeight;
+            } catch (e) { console.error(e); }
+        }
+
+        // JOURNAL
         document.getElementById('saveJournalBtn').addEventListener('click', async () => {
             if(!apiKey.value) return alert("Enter API Key");
-            document.getElementById('journalStatus').innerText = "Saving to memory...";
-            
+            document.getElementById('journalStatus').innerText = "Saving...";
             const data = {
                 soreness: parseInt(document.getElementById('jSoreness').value),
                 energy: parseInt(document.getElementById('jEnergy').value),
@@ -269,44 +304,87 @@
                 vball_intensity: parseInt(document.getElementById('vballIntensity').value) || 0,
                 notes: document.getElementById('jNotes').value || "No notes today."
             };
-
             try {
                 await fetch('/api/v1/journal', {
-                    method: 'POST', headers: { 'X-API-Key': apiKey.value, 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
+                    method: 'POST', headers: { 'X-API-Key': apiKey.value, 'Content-Type': 'application/json' }, body: JSON.stringify(data)
                 });
-                document.getElementById('journalStatus').innerText = "✅ Saved! The AI will remember this.";
-                setTimeout(() => { document.getElementById('journalStatus').innerText=""; document.getElementById('jNotes').value=""; }, 3000);
-            } catch (e) { document.getElementById('journalStatus').innerText = e.message; }
+                document.getElementById('journalStatus').innerText = "✅ Saved!";
+            } catch (e) {}
         });
 
-        // FETCH HISTORY
-        async function fetchHistory() {
-            if(!apiKey.value) { alert("Please enter your API key first."); return; }
+        // PAGINATED HISTORY & EDITING
+        let currentPage = 1;
+        async function fetchHistory(page = 1, append = false) {
+            if(!apiKey.value) return;
             const list = document.getElementById('historyList');
-            list.innerHTML = "<p style='text-align:center;'>Loading...</p>";
+            if(!append) list.innerHTML = "<p style='text-align:center;'>Loading...</p>";
+            
             try {
-                const res = await fetch('/api/v1/food-history', { headers: { 'X-API-Key': apiKey.value }});
-                if (!res.ok) throw new Error(`Server returned ${res.status}`);
+                const res = await fetch(`/api/v1/food-history?page=${page}&limit=10`, { headers: { 'X-API-Key': apiKey.value }});
                 const data = await res.json();
-                if (data.length === 0) { list.innerHTML = "<p style='text-align:center; color:#aaa; margin-top:20px;'>No food logged yet. Go eat something!</p>"; return; }
-                list.innerHTML = "";
+                
+                if (!append) list.innerHTML = "";
+                if (data.length === 0 && !append) { list.innerHTML = "<p style='text-align:center;'>No food logged.</p>"; return; }
+                
                 data.forEach(item => {
                     const d = new Date(item.timestamp + "Z");
-                    const totalMacros = item.protein + item.carbs + item.fats;
-                    const pPct = totalMacros ? Math.round((item.protein / totalMacros) * 100) : 0;
-                    const cPct = totalMacros ? Math.round((item.carbs / totalMacros) * 100) : 0;
-                    const fPct = totalMacros ? Math.round((item.fats / totalMacros) * 100) : 0;
-
                     list.innerHTML += `
-                        <div class="history-card">
-                            <h4>${item.item_name} <span style="float:right;">${item.calories} kcal</span></h4>
-                            <p>${d.toLocaleDateString()} at ${d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
-                            <p>P: ${item.protein}g | C: ${item.carbs}g | F: ${item.fats}g</p>
-                            <div class="percentages">${pPct}% Protein | ${cPct}% Carbs | ${fPct}% Fat</div>
+                        <div class="history-card" id="card-${item.id}">
+                            <div id="view-${item.id}">
+                                <h4>${item.item_name} <button onclick="toggleEdit(${item.id})" style="float:right; width:auto; padding:4px 8px; font-size:0.8em;">Edit</button></h4>
+                                <p>${d.toLocaleDateString()} at ${d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                                <p id="macros-${item.id}">P: ${item.protein}g | C: ${item.carbs}g | F: ${item.fats}g | ${item.calories} kcal</p>
+                            </div>
+                            <div id="edit-${item.id}" class="hidden" style="margin-top:10px;">
+                                <input type="number" id="edit-cal-${item.id}" value="${item.calories}" placeholder="Calories" style="width:48%; display:inline;">
+                                <input type="number" id="edit-p-${item.id}" value="${item.protein}" placeholder="Protein" style="width:48%; display:inline;">
+                                <input type="number" id="edit-c-${item.id}" value="${item.carbs}" placeholder="Carbs" style="width:48%; display:inline;">
+                                <input type="number" id="edit-f-${item.id}" value="${item.fats}" placeholder="Fats" style="width:48%; display:inline;">
+                                <button onclick="saveEdit(${item.id})" class="success" style="padding:8px; margin-top:5px;">Save</button>
+                            </div>
                         </div>`;
                 });
-            } catch (e) { list.innerHTML = `<p style='text-align:center; color:#ff453a; margin-top:20px;'>Error: ${e.message}</p>`; }
+
+                // Handle Load More Button
+                let loadBtn = document.getElementById('loadMoreBtn');
+                if(loadBtn) loadBtn.remove();
+                if(data.length === 10) {
+                    list.innerHTML += `<button id="loadMoreBtn" onclick="loadMore()" style="background:#2c2c2c; color:#0a84ff;">Load More</button>`;
+                }
+
+            } catch (e) {}
+        }
+
+        function loadMore() {
+            currentPage++;
+            fetchHistory(currentPage, true);
+        }
+
+        function toggleEdit(id) {
+            document.getElementById(`view-${id}`).classList.add('hidden');
+            document.getElementById(`edit-${id}`).classList.remove('hidden');
+        }
+
+        async function saveEdit(id) {
+            const payload = {
+                id: id,
+                calories: parseInt(document.getElementById(`edit-cal-${id}`).value),
+                protein: parseInt(document.getElementById(`edit-p-${id}`).value),
+                carbs: parseInt(document.getElementById(`edit-c-${id}`).value),
+                fats: parseInt(document.getElementById(`edit-f-${id}`).value)
+            };
+
+            try {
+                await fetch('/api/v1/food-history', {
+                    method: 'PUT', headers: { 'X-API-Key': apiKey.value, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                // Update UI inline
+                document.getElementById(`macros-${id}`).innerText = `P: ${payload.protein}g | C: ${payload.carbs}g | F: ${payload.fats}g | ${payload.calories} kcal`;
+                document.getElementById(`view-${id}`).classList.remove('hidden');
+                document.getElementById(`edit-${id}`).classList.add('hidden');
+            } catch(e) { alert("Failed to save edit."); }
         }
     </script>
 </body>

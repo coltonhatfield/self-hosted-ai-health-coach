@@ -5,9 +5,10 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import os
 import logging
 
-from models import AppleHealthData, ManualEntryData, MacroData, TextFoodRequest, WorkoutRequest, DailyJournal
-from database import write_metric, log_food_to_sqlite, get_food_log_from_sqlite, get_todays_advice, get_trailing_7_days, save_journal, get_recent_journal, save_workout_plan, get_todays_workout_plan
-from gemini_ai import estimate_macros_from_image, estimate_macros_from_text, generate_workout_plan
+# FIX 1: Added FoodEditRequest and ChatRequest to the imports
+from models import AppleHealthData, ManualEntryData, MacroData, TextFoodRequest, WorkoutRequest, DailyJournal, FoodEditRequest, ChatRequest
+from database import write_metric, log_food_to_sqlite, get_food_log_from_sqlite, get_todays_advice, get_trailing_7_days, save_journal, get_recent_journal, save_workout_plan, get_todays_workout_plan, get_todays_macros, update_food_in_sqlite
+from gemini_ai import estimate_macros_from_image, estimate_macros_from_text, generate_workout_plan, generate_next_meal_recommendation, coach_chat
 from jobs import ai_coach_job, withings_sync_job
 
 logging.basicConfig(level=logging.INFO)
@@ -64,11 +65,17 @@ def parse_food_text(req: TextFoodRequest):
 def log_approved_macros(data: MacroData):
     write_metric("macros", data.dict())
     log_food_to_sqlite(data.item_name, data.calories, data.protein, data.carbs, data.fats)
-    return {"status": "success"}
 
+    # Generate the next meal recommendation
+    todays_macros = get_todays_macros()
+    recommendation = generate_next_meal_recommendation(todays_macros)
+
+    return {"status": "success", "next_meal_recommendation": recommendation}
+
+# FIX 2: Added the missing '@' symbol here
 @app.get("/api/v1/food-history", dependencies=[Depends(verify_api_key)])
-def get_food_history():
-    return get_food_log_from_sqlite()
+def get_food_history(page: int = 1, limit: int = 10):
+    return get_food_log_from_sqlite(page, limit)
 
 @app.get("/api/v1/daily-advice", dependencies=[Depends(verify_api_key)])
 def serve_daily_advice():
@@ -91,3 +98,13 @@ def build_workout(req: WorkoutRequest):
     plan = generate_workout_plan(data_summary, req.soreness, req.energy, journal_history, req.modification)
     save_workout_plan(plan)
     return {"workout_plan": plan}
+
+@app.put("/api/v1/food-history", dependencies=[Depends(verify_api_key)])
+def edit_food_history(req: FoodEditRequest):
+    update_food_in_sqlite(req.id, req.calories, req.protein, req.carbs, req.fats)
+    return {"status": "success"}
+
+@app.post("/api/v1/coach-chat", dependencies=[Depends(verify_api_key)])
+def chat_with_coach(req: ChatRequest):
+    reply = coach_chat(req.message, req.history)
+    return {"reply": reply}
