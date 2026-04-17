@@ -2,7 +2,9 @@ import os
 import json
 import logging
 import google.generativeai as genai
-from database import get_recent_journal
+
+# Added trailing 7 days and macros to the imports so the coach has your context
+from database import get_recent_journal, get_trailing_7_days, get_todays_macros
 
 logger = logging.getLogger(__name__)
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -114,12 +116,31 @@ def generate_next_meal_recommendation(macros: dict) -> str:
 
 def coach_chat(message: str, history: list) -> str:
     try:
-        # Reconstruct the chat history for Gemini
+        # FIX 1: Prevent the "double user" crash by stripping out the duplicate message
+        if history and history[-1].role == "user" and history[-1].text == message:
+            history.pop()
+
         formatted_history = [{"role": "user" if h.role == "user" else "model", "parts": [h.text]} for h in history]
-        
+
+        # FIX 2: Pull in your live database context
+        recent_data = get_trailing_7_days()
+        journal = get_recent_journal()
+        todays_macros = get_todays_macros()
+
+        system_instruction = f"""
+        You are an elite strength and conditioning coach and personal trainer for a collegiate club volleyball libero. Keep your answers concise, practical, and highly conversational. Do not use markdown unless formatting a list.
+
+        CRITICAL CONTEXT - You have access to the athlete's live data right now:
+        - Today's Macros: {todays_macros.get('calories', 0)} kcal, {todays_macros.get('protein', 0)}g protein, {todays_macros.get('carbs', 0)}g carbs, {todays_macros.get('fats', 0)}g fats.
+        - Recent Journal/Feelings: {journal}
+        - Last 7 Days of Strain/Health Data: {recent_data}
+
+        Use this data to answer their questions accurately. If they ask why they are not recovered, look at their macros and journal to give a highly specific answer based on their actual numbers.
+        """
+
         model = genai.GenerativeModel(
             'gemini-2.5-flash',
-            system_instruction="You are an elite strength and conditioning coach and personal trainer for a collegiate club volleyball libero. Keep your answers concise, practical, and highly conversational. Do not use markdown unless formatting a list."
+            system_instruction=system_instruction
         )
         chat = model.start_chat(history=formatted_history)
         response = chat.send_message(message)

@@ -2,13 +2,22 @@ from pydantic import BaseModel
 from typing import Optional
 
 class AppleHealthData(BaseModel):
-    timestamp: str  
-    sleep_hours: float
-    steps: int
-    active_energy_kcal: float
-    resting_energy_kcal: float
+    timestamp: Optional[str] = None
+    date: Optional[str] = None # Added because iOS Shortcuts usually prefer 'date'
+    
+    # Standard Health Metrics
+    sleep_hours: Optional[float] = None
+    steps: Optional[int] = None
+    active_energy_kcal: Optional[float] = None
+    resting_energy_kcal: Optional[float] = None
     weight_lbs: Optional[float] = None
     height_in: Optional[float] = None
+    
+    # Boilerbites Dietary Sync Fields
+    dietary_energy_kcal: Optional[float] = None
+    protein_g: Optional[float] = None
+    carbohydrates_g: Optional[float] = None
+    fat_total_g: Optional[float] = None
 
 class ManualEntryData(BaseModel):
     date: str

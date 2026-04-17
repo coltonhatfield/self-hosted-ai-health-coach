@@ -43,9 +43,70 @@ def health_check():
     return {"status": "healthy", "message": "System is running"}
 
 @app.post("/api/v1/apple-health", dependencies=[Depends(verify_api_key)])
-def ingest_apple_health(data: AppleHealthData):
-    write_metric("apple_health", data.dict(exclude={'timestamp'}), timestamp_str=data.timestamp)
-    return {"status": "success"}
+def ingest_apple_health(payload: dict):
+    parsed_data = {}
+    
+    metrics = payload.get("data", {}).get("metrics", [])
+    
+    if not metrics:
+        return {"status": "ignored", "message": "No valid metrics found in payload"}
+        
+    for metric in metrics:
+        name = metric.get("name", "")
+        data_points = metric.get("data", [])
+        
+        if not data_points:
+            continue
+            
+        # Sum up all the data points for the day
+        total_qty = sum(point.get("qty", 0) for point in data_points if isinstance(point.get("qty"), (int, float)))
+        # For body metrics, grab the most recent measurement
+        last_qty = data_points[-1].get("qty") if data_points else None
+        
+        # --- BULLETPROOF MAPPING ---
+        if name == "step_count":
+            parsed_data["steps"] = total_qty
+        elif name in ["active_energy", "active_energy_kcal"]:
+            parsed_data["active_energy_kcal"] = total_qty
+        elif name in ["basal_energy_burned", "resting_energy", "resting_energy_kcal"]:
+            parsed_data["resting_energy_kcal"] = total_qty
+        elif name in ["dietary_energy", "energy", "calories"]:
+            parsed_data["dietary_energy_kcal"] = total_qty
+        elif name in ["dietary_protein", "protein"]:
+            parsed_data["protein_g"] = total_qty
+        elif name in ["dietary_carbohydrates", "carbohydrates", "carbs"]:
+            parsed_data["carbohydrates_g"] = total_qty
+        elif name in ["dietary_fat_total", "fat_total", "fat"]:
+            parsed_data["fat_total_g"] = total_qty
+        elif name in ["dietary_sugar", "sugar"]:
+            parsed_data["sugar_g"] = total_qty
+        elif name in ["dietary_fiber", "fiber"]:
+            parsed_data["fiber_g"] = total_qty
+        elif name in ["body_mass", "weight"]:
+            parsed_data["weight_lbs"] = last_qty
+        elif name in ["body_fat_percentage", "body_fat"]:
+            parsed_data["body_fat_percent"] = last_qty
+        elif name in ["body_mass_index", "bmi"]:
+            parsed_data["bmi"] = last_qty
+        elif name in ["height"]:
+            parsed_data["height_in"] = last_qty
+        elif name in ["sleep_analysis", "sleep"]:
+            parsed_data["sleep_hours"] = total_qty
+        else:
+            print(f"⚠️ Unmapped metric received from phone: {name}")
+            
+    if not parsed_data:
+        return {"status": "ignored", "message": "Payload received, but no mapped metrics were found"}
+
+    record_time = None
+    try:
+        record_time = metrics[0]["data"][0].get("date")
+    except (IndexError, KeyError):
+        pass
+
+    write_metric("apple_health", parsed_data, timestamp_str=record_time)
+    
+    return {"status": "success", "metrics_written": list(parsed_data.keys())}
 
 @app.post("/api/v1/manual-entry", dependencies=[Depends(verify_api_key)])
 def ingest_manual_entry(data: ManualEntryData):
