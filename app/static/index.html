@@ -3,388 +3,168 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Food Tracker</title>
+    <title>AI Performance Command Center</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background-color: #121212; color: #fff; padding: 15px; max-width: 500px; margin: 0 auto; }
-        .tabs { display: flex; margin-bottom: 20px; font-size: 0.9em; }
-        .tab { flex: 1; text-align: center; padding: 10px 5px; background: #2c2c2c; cursor: pointer; border-bottom: 2px solid transparent; }
-        .tab.active { border-bottom: 2px solid #0a84ff; font-weight: bold; }
-        .content { display: none; }
-        .content.active { display: block; }
-        input[type="text"], input[type="number"], input[type="password"] { width: 100%; padding: 12px; margin: 6px 0 16px 0; background: #2c2c2c; border: 1px solid #444; color: white; border-radius: 8px; box-sizing: border-box; }
-        input[type="range"] { margin: 10px 0; accent-color: #0a84ff; }
-        button { width: 100%; padding: 14px; background: #0a84ff; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-bottom: 10px; }
-        button:disabled { background: #3a3a3c; color: #8e8e93; }
-        button.success { background: #30d158; }
-        .macro-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .hidden { display: none; }
-        .history-card { background: #1e1e1e; padding: 12px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #0a84ff; }
-        .history-card h4 { margin: 0 0 5px 0; }
-        .history-card p { margin: 0; font-size: 0.85em; color: #aaa; }
-        .percentages { font-size: 0.8em; color: #30d158; margin-top: 5px; font-weight: bold; }
+        :root { --bg: #0d1117; --panel: #161b22; --border: #30363d; --text: #c9d1d9; --accent: #58a6ff; --success: #2ea043; --warning: #d29922; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background-color: var(--bg); color: var(--text); margin: 0; padding: 20px; box-sizing: border-box; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--border); }
+        .header input { background: var(--panel); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; }
+        .dashboard { display: grid; grid-template-columns: 1fr; gap: 20px; max-width: 1400px; margin: 0 auto; }
+        @media (min-width: 900px) { .dashboard { grid-template-columns: 1fr 1fr; } }
+        .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 20px; display: flex; flex-direction: column; }
+        h2 { margin-top: 0; color: #fff; font-size: 1.2rem; display: flex; justify-content: space-between; align-items: center; }
+        button { background: var(--accent); color: #fff; border: none; padding: 10px 15px; border-radius: 6px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
+        button:hover { opacity: 0.8; }
+        button.secondary { background: var(--border); }
+        .loading { color: var(--warning); font-style: italic; font-size: 0.9em; display: none; }
+        
+        /* Insights Styling */
+        .insight-content { line-height: 1.6; font-size: 0.95rem; flex-grow: 1; overflow-y: auto; white-space: pre-wrap; padding-top: 10px; }
+        
+        /* Workout Styling */
+        textarea { width: 100%; height: 400px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 15px; font-family: monospace; font-size: 0.9rem; resize: vertical; line-height: 1.5; box-sizing: border-box; margin-bottom: 15px; }
+        .ai-controls { display: flex; gap: 10px; margin-top: 10px; }
+        .ai-controls input { flex-grow: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 10px; border-radius: 6px; }
     </style>
 </head>
 <body>
 
-    <label>API Key</label>
-    <input type="password" id="apiKey" placeholder="Enter API Key">
-
-    <div class="tabs">
-        <div class="tab active" onclick="switchTab('logTab')">Food</div>
-        <div class="tab" onclick="switchTab('workoutTab')">Workout</div>
-        <div class="tab" onclick="switchTab('journalTab')">Journal</div>
-        <div class="tab" onclick="switchTab('historyTab'); fetchHistory();">History</div>
+    <div class="header">
+        <h1 style="margin:0; font-size:1.5rem; color:#fff;">Performance Dashboard</h1>
+        <input type="password" id="apiKey" placeholder="API Key">
     </div>
 
-    <div id="logTab" class="content active">
-
-        <div class="history-card" style="border-left-color: #bf5af2; margin-bottom: 25px;">
-            <h4 style="color: #bf5af2;">🧠 Daily AI Coach</h4>
-            <p id="aiAdviceText" style="color: #fff; font-size: 0.95em; line-height: 1.4; margin-top: 5px;">Loading advice...</p>
+    <div class="dashboard">
+        <div class="panel">
+            <h2>
+                Health & Recovery Insights 
+                <button onclick="forceAnalyze()">Analyze Data</button>
+            </h2>
+            <span id="insightLoading" class="loading">Analyzing InfluxDB telemetry...</span>
+            <div id="insightContent" class="insight-content">Waiting for analysis...</div>
         </div>
 
-        <label>Option 1: Describe Food (Text)</label>
-        <input type="text" id="textInput" placeholder="e.g. 'A glass of coke and 2 eggs'">
-        <button id="analyzeTextBtn">Analyze Text</button>
-
-        <label style="display:block; text-align:center; margin:10px 0;">-- OR --</label>
-
-        <label>Option 2: Upload Photo</label>
-        <input type="file" id="imageInput" accept="image/*" style="margin-bottom:15px; width:100%;">
-        <button id="analyzeImgBtn" disabled>Analyze Photo</button>
-
-        <div id="status" style="text-align:center; margin:10px; color:#ff9f0a;"></div>
-
-        <div id="macroEditor" class="hidden">
-            <label>Item Name</label>
-            <input type="text" id="itemName" value="">
-            <div class="macro-grid">
-                <div><label>Calories</label><input type="number" id="calories"></div>
-                <div><label>Protein (g)</label><input type="number" id="protein"></div>
-                <div><label>Carbs (g)</label><input type="number" id="carbs"></div>
-                <div><label>Fats (g)</label><input type="number" id="fats"></div>
-            </div>
-            <button id="submitBtn" class="success">Log to Database</button>
-        </div>
-    </div>
-
-    <div id="workoutTab" class="content">
-        <div class="history-card" style="border-left-color: #ff453a;">
-            <h4 style="color: #ff453a;">⚡ Generate Libero Workout</h4>
+        <div class="panel">
+            <h2>
+                7-Day Libero Training Plan
+                <button onclick="generateWorkout()" class="secondary">Draft New Week</button>
+            </h2>
+            <span id="workoutLoading" class="loading">Structuring microcycle...</span>
             
-            <label style="margin-top:15px; display:block;">How sore are you? (1-10)</label>
-            <input type="range" id="sorenessSlider" min="1" max="10" value="3" style="width:100%; accent-color: #ff453a;">
-            <div style="display:flex; justify-content:space-between; font-size:0.8em; color:#aaa;"><span>1 (Fresh)</span><span>10 (Crippled)</span></div>
-
-            <label style="margin-top:20px; display:block;">Energy Level? (1-10)</label>
-            <input type="range" id="energySlider" min="1" max="10" value="7" style="width:100%; accent-color: #ff453a;">
-            <div style="display:flex; justify-content:space-between; font-size:0.8em; color:#aaa; margin-bottom:20px;"><span>1 (Exhausted)</span><span>10 (Limitless)</span></div>
-
-            <button id="generateWorkoutBtn" style="background:#ff453a;">Build New Plan</button>
-            <div id="workoutResult" style="margin-top:15px; font-size:0.95em; line-height:1.5; color:#fff; white-space: pre-wrap;"></div>
-
-            <div id="adjustmentSection" class="hidden" style="margin-top: 20px; border-top: 1px solid #444; padding-top: 15px;">
-                <label style="color:#ff453a;">Adjust Workout</label>
-                <input type="text" id="wModification" placeholder="e.g., 'skip shoulders, wrist hurts'">
-                <button id="adjustWorkoutBtn" style="background:#3a3a3c; color:#fff; margin-top:5px;">Update Plan</button>
-            </div>
-        </div>
-        
-        <div class="history-card" style="border-left-color: #0a84ff; margin-top: 20px;">
-            <h4 style="color: #0a84ff;">💬 Chat with Coach</h4>
-            <div id="chatHistoryDiv" style="height: 150px; overflow-y: auto; background: #121212; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 0.9em;">
-                <div style="text-align:left; margin-bottom:10px;"><span style="background:#3a3a3c; padding:8px; border-radius:8px; display:inline-block;">What's up? Ready to train?</span></div>
-            </div>
-            <div style="display: flex; gap: 5px;">
-                <input type="text" id="chatInput" placeholder="Ask about your regimen..." style="margin: 0; flex: 1;">
-                <button onclick="sendChatMessage()" style="width: auto; padding: 0 15px; margin: 0;">Send</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="journalTab" class="content">
-        <div class="history-card" style="border-left-color: #ffd60a;">
-            <h4 style="color: #ffd60a;">📝 Daily Check-In & Feedback</h4>
+            <p style="font-size:0.85em; color:#8b949e; margin-top:0;">Manually edit the text below, or prompt the AI to modify it.</p>
             
-            <label style="margin-top:15px; display:block;">Overall Soreness (1-10)</label>
-            <input type="range" id="jSoreness" min="1" max="10" value="1" style="width:100%; accent-color: #ffd60a;">
+            <textarea id="workoutPlan" placeholder="Your weekly plan will appear here. You can type directly in this box to make manual adjustments..."></textarea>
             
-            <label style="margin-top:10px; display:block;">Overall Energy (1-10)</label>
-            <input type="range" id="jEnergy" min="1" max="10" value="5" style="width:100%; accent-color: #ffd60a;">
-
-            <div class="macro-grid" style="margin-top:15px;">
-                <div><label>Volleyball Hours</label><input type="number" step="0.5" id="vballHours" value="0"></div>
-                <div><label>Intensity (1-10)</label><input type="number" id="vballIntensity" value="0"></div>
+            <div class="ai-controls">
+                <input type="text" id="aiPrompt" placeholder="e.g. 'Make Tuesday upper body only' or 'Add more plyos'">
+                <button onclick="adjustWorkout()">AI Adjust</button>
+                <button onclick="saveWorkout()" class="secondary" style="background: var(--success);">Save Edits</button>
             </div>
-
-            <label style="margin-top:10px; display:block;">Notes / Talk to AI Coach</label>
-            <input type="text" id="jNotes" placeholder="e.g. 'Leg day yesterday crushed me.'">
-
-            <button id="saveJournalBtn" style="background:#ffd60a; color:#000;">Save to AI Memory</button>
-            <div id="journalStatus" style="text-align:center; margin-top:10px; color:#ffd60a;"></div>
+            <span id="saveStatus" style="font-size:0.85em; color:var(--success); margin-top:10px; display:none;">Plan saved!</span>
         </div>
-    </div>
-
-    <div id="historyTab" class="content">
-        <div id="historyList">Loading...</div>
     </div>
 
     <script>
         const apiKey = document.getElementById('apiKey');
         if(localStorage.getItem('health_api_key')) apiKey.value = localStorage.getItem('health_api_key');
-        apiKey.addEventListener('change', () => {
-            localStorage.setItem('health_api_key', apiKey.value);
-            fetchAdvice();
-            fetchWorkout();
-        });
+        apiKey.addEventListener('change', () => localStorage.setItem('health_api_key', apiKey.value));
 
-        function switchTab(tabId) {
-            document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.getElementById(tabId).classList.add('active');
-            const activeTab = Array.from(document.querySelectorAll('.tab')).find(tab => tab.getAttribute('onclick').includes(tabId));
-            if(activeTab) activeTab.classList.add('active');
+        // Format Markdown-ish text for the insights panel
+        function formatText(text) {
+            return text.replace(/\*\*(.*?)\*\*/g, '<strong style="color:#fff;">$1</strong>');
         }
 
-        const populateMacros = (data) => {
-            document.getElementById('itemName').value = data.item_name || "Food Item";
-            document.getElementById('calories').value = data.calories || 0;
-            document.getElementById('protein').value = data.protein || 0;
-            document.getElementById('carbs').value = data.carbs || 0;
-            document.getElementById('fats').value = data.fats || 0;
-            document.getElementById('macroEditor').classList.remove('hidden');
-            document.getElementById('status').innerText = "Analysis complete! Edit if needed.";
-        }
-
-        // TEXT ANALYZE
-        document.getElementById('analyzeTextBtn').addEventListener('click', async () => {
-            if(!apiKey.value) return alert("Enter API Key");
-            document.getElementById('status').innerText = "Analyzing text...";
-            try {
-                const res = await fetch('/api/v1/parse-food-text', {
-                    method: 'POST', headers: { 'X-API-Key': apiKey.value, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text: document.getElementById('textInput').value })
-                });
-                populateMacros(await res.json());
-            } catch (e) { document.getElementById('status').innerText = e.message; }
-        });
-
-        // IMAGE ANALYZE
-        const imgInput = document.getElementById('imageInput');
-        const imgBtn = document.getElementById('analyzeImgBtn');
-        imgInput.addEventListener('change', () => imgBtn.disabled = !imgInput.files.length);
-
-        imgBtn.addEventListener('click', async () => {
-            if(!apiKey.value) return alert("Enter API Key");
-            document.getElementById('status').innerText = "Analyzing image...";
-            const formData = new FormData();
-            formData.append("file", imgInput.files[0]);
-            try {
-                const res = await fetch('/api/v1/parse-food', {
-                    method: 'POST', headers: { 'X-API-Key': apiKey.value }, body: formData
-                });
-                populateMacros(await res.json());
-            } catch (e) { document.getElementById('status').innerText = e.message; }
-        });
-
-        // SUBMIT FOOD & GET RECOMMENDATION
-        document.getElementById('submitBtn').addEventListener('click', async () => {
-            document.getElementById('status').innerText = "Saving...";
-            const data = {
-                item_name: document.getElementById('itemName').value,
-                calories: parseInt(document.getElementById('calories').value),
-                protein: parseInt(document.getElementById('protein').value),
-                carbs: parseInt(document.getElementById('carbs').value),
-                fats: parseInt(document.getElementById('fats').value)
-            };
-            try {
-                const res = await fetch('/api/v1/log-macros', {
-                    method: 'POST', headers: { 'X-API-Key': apiKey.value, 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
-                const responseData = await res.json();
-                
-                document.getElementById('macroEditor').classList.add('hidden');
-                document.getElementById('textInput').value=""; 
-                
-                // Show Next Meal Recommendation
-                document.getElementById('status').innerHTML = `✅ Saved!<br><br><strong>Coach Says:</strong> ${responseData.next_meal_recommendation}`;
-            } catch (e) { document.getElementById('status').innerText = e.message; }
-        });
-
-        // FETCH AI ADVICE
-        async function fetchAdvice() {
+        // Fast load: Grabs whatever is currently cached in the database on page refresh
+        async function fetchCachedAdvice() {
             if(!apiKey.value) return;
             try {
                 const res = await fetch('/api/v1/daily-advice', { headers: { 'X-API-Key': apiKey.value }});
                 const data = await res.json();
-                document.getElementById('aiAdviceText').innerText = data.advice;
-            } catch (e) {}
+                document.getElementById('insightContent').innerHTML = formatText(data.advice);
+            } catch (e) {
+                document.getElementById('insightContent').innerText = "Error analyzing data.";
+            }
         }
 
-        // WORKOUT GEN
-        async function fetchWorkout() {
+        // On-Demand Load: Forces the AI to read InfluxDB and generate a brand new insight report
+        async function forceAnalyze() {
+            if(!apiKey.value) return alert("Enter API Key");
+            document.getElementById('insightLoading').style.display = 'inline';
+            try {
+                const res = await fetch('/api/v1/force-advice', { method: 'POST', headers: { 'X-API-Key': apiKey.value }});
+                const data = await res.json();
+                document.getElementById('insightContent').innerHTML = formatText(data.advice);
+            } catch (e) {
+                document.getElementById('insightContent').innerText = "Error analyzing data. Check backend logs.";
+            } finally {
+                document.getElementById('insightLoading').style.display = 'none';
+            }
+        }
+
+        // Grabs the currently saved text plan from the database
+        async function fetchCurrentWorkout() {
             if(!apiKey.value) return;
             try {
                 const res = await fetch('/api/v1/workout', { headers: { 'X-API-Key': apiKey.value }});
                 const data = await res.json();
-                if (data.workout_plan) {
-                    document.getElementById('workoutResult').innerHTML = data.workout_plan.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-                    document.getElementById('adjustmentSection').classList.remove('hidden');
-                }
+                if(data.workout_plan) document.getElementById('workoutPlan').value = data.workout_plan;
             } catch (e) {}
         }
 
-        if(apiKey.value) {
-            fetchAdvice();
-            fetchWorkout();
-        }
-
-        async function triggerWorkoutGeneration(modification = null) {
+        // Generates a new plan or modifies an existing one
+        async function generateWorkout(modification = null) {
             if(!apiKey.value) return alert("Enter API Key");
-            const resultDiv = document.getElementById('workoutResult');
-            resultDiv.innerText = "Analyzing recent health strain and generating plan...";
+            document.getElementById('workoutLoading').style.display = 'inline';
             
-            const data = {
-                soreness: parseInt(document.getElementById('sorenessSlider').value),
-                energy: parseInt(document.getElementById('energySlider').value)
-            };
-            if (modification) data.modification = modification;
+            const payload = { soreness: 5, energy: 5 }; // Defaults for the backend schema
+            
+            // If adjusting an existing plan, pass the current text and the prompt
+            if (modification) {
+                const currentPlan = document.getElementById('workoutPlan').value;
+                payload.modification = `CURRENT PLAN:\n${currentPlan}\n\nUSER REQUEST: ${modification}`;
+            }
 
             try {
                 const res = await fetch('/api/v1/generate-workout', {
                     method: 'POST', headers: { 'X-API-Key': apiKey.value, 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
-                const responseData = await res.json();
-                resultDiv.innerHTML = responseData.workout_plan.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-                document.getElementById('adjustmentSection').classList.remove('hidden');
-                document.getElementById('wModification').value = ""; 
-            } catch (e) { resultDiv.innerText = e.message; }
-        }
-
-        document.getElementById('generateWorkoutBtn').addEventListener('click', () => triggerWorkoutGeneration());
-        document.getElementById('adjustWorkoutBtn').addEventListener('click', () => {
-            triggerWorkoutGeneration(document.getElementById('wModification').value);
-        });
-
-        // CHAT WITH COACH LOGIC
-        let chatHistory = [];
-        async function sendChatMessage() {
-            const input = document.getElementById('chatInput');
-            const text = input.value;
-            if(!text || !apiKey.value) return;
-            
-            const chatBox = document.getElementById('chatHistoryDiv');
-            chatBox.innerHTML += `<div style="text-align:right; margin-bottom:10px;"><span style="background:#0a84ff; padding:8px; border-radius:8px;">${text}</span></div>`;
-            input.value = "";
-            
-            chatHistory.push({role: "user", text: text});
-            
-            try {
-                const res = await fetch('/api/v1/coach-chat', {
-                    method: 'POST', headers: { 'X-API-Key': apiKey.value, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: text, history: chatHistory.slice(-6) }) // Keep last 6 messages
-                });
-                const data = await res.json();
-                chatHistory.push({role: "model", text: data.reply});
-                chatBox.innerHTML += `<div style="text-align:left; margin-bottom:10px;"><span style="background:#3a3a3c; padding:8px; border-radius:8px; display:inline-block;">${data.reply}</span></div>`;
-                chatBox.scrollTop = chatBox.scrollHeight;
-            } catch (e) { console.error(e); }
-        }
-
-        // JOURNAL
-        document.getElementById('saveJournalBtn').addEventListener('click', async () => {
-            if(!apiKey.value) return alert("Enter API Key");
-            document.getElementById('journalStatus').innerText = "Saving...";
-            const data = {
-                soreness: parseInt(document.getElementById('jSoreness').value),
-                energy: parseInt(document.getElementById('jEnergy').value),
-                vball_hours: parseFloat(document.getElementById('vballHours').value) || 0,
-                vball_intensity: parseInt(document.getElementById('vballIntensity').value) || 0,
-                notes: document.getElementById('jNotes').value || "No notes today."
-            };
-            try {
-                await fetch('/api/v1/journal', {
-                    method: 'POST', headers: { 'X-API-Key': apiKey.value, 'Content-Type': 'application/json' }, body: JSON.stringify(data)
-                });
-                document.getElementById('journalStatus').innerText = "✅ Saved!";
-            } catch (e) {}
-        });
-
-        // PAGINATED HISTORY & EDITING
-        let currentPage = 1;
-        async function fetchHistory(page = 1, append = false) {
-            if(!apiKey.value) return;
-            const list = document.getElementById('historyList');
-            if(!append) list.innerHTML = "<p style='text-align:center;'>Loading...</p>";
-            
-            try {
-                const res = await fetch(`/api/v1/food-history?page=${page}&limit=10`, { headers: { 'X-API-Key': apiKey.value }});
-                const data = await res.json();
-                
-                if (!append) list.innerHTML = "";
-                if (data.length === 0 && !append) { list.innerHTML = "<p style='text-align:center;'>No food logged.</p>"; return; }
-                
-                data.forEach(item => {
-                    const d = new Date(item.timestamp + "Z");
-                    list.innerHTML += `
-                        <div class="history-card" id="card-${item.id}">
-                            <div id="view-${item.id}">
-                                <h4>${item.item_name} <button onclick="toggleEdit(${item.id})" style="float:right; width:auto; padding:4px 8px; font-size:0.8em;">Edit</button></h4>
-                                <p>${d.toLocaleDateString()} at ${d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
-                                <p id="macros-${item.id}">P: ${item.protein}g | C: ${item.carbs}g | F: ${item.fats}g | ${item.calories} kcal</p>
-                            </div>
-                            <div id="edit-${item.id}" class="hidden" style="margin-top:10px;">
-                                <input type="number" id="edit-cal-${item.id}" value="${item.calories}" placeholder="Calories" style="width:48%; display:inline;">
-                                <input type="number" id="edit-p-${item.id}" value="${item.protein}" placeholder="Protein" style="width:48%; display:inline;">
-                                <input type="number" id="edit-c-${item.id}" value="${item.carbs}" placeholder="Carbs" style="width:48%; display:inline;">
-                                <input type="number" id="edit-f-${item.id}" value="${item.fats}" placeholder="Fats" style="width:48%; display:inline;">
-                                <button onclick="saveEdit(${item.id})" class="success" style="padding:8px; margin-top:5px;">Save</button>
-                            </div>
-                        </div>`;
-                });
-
-                // Handle Load More Button
-                let loadBtn = document.getElementById('loadMoreBtn');
-                if(loadBtn) loadBtn.remove();
-                if(data.length === 10) {
-                    list.innerHTML += `<button id="loadMoreBtn" onclick="loadMore()" style="background:#2c2c2c; color:#0a84ff;">Load More</button>`;
-                }
-
-            } catch (e) {}
-        }
-
-        function loadMore() {
-            currentPage++;
-            fetchHistory(currentPage, true);
-        }
-
-        function toggleEdit(id) {
-            document.getElementById(`view-${id}`).classList.add('hidden');
-            document.getElementById(`edit-${id}`).classList.remove('hidden');
-        }
-
-        async function saveEdit(id) {
-            const payload = {
-                id: id,
-                calories: parseInt(document.getElementById(`edit-cal-${id}`).value),
-                protein: parseInt(document.getElementById(`edit-p-${id}`).value),
-                carbs: parseInt(document.getElementById(`edit-c-${id}`).value),
-                fats: parseInt(document.getElementById(`edit-f-${id}`).value)
-            };
-
-            try {
-                await fetch('/api/v1/food-history', {
-                    method: 'PUT', headers: { 'X-API-Key': apiKey.value, 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-                
-                // Update UI inline
-                document.getElementById(`macros-${id}`).innerText = `P: ${payload.protein}g | C: ${payload.carbs}g | F: ${payload.fats}g | ${payload.calories} kcal`;
-                document.getElementById(`view-${id}`).classList.remove('hidden');
-                document.getElementById(`edit-${id}`).classList.add('hidden');
-            } catch(e) { alert("Failed to save edit."); }
+                const data = await res.json();
+                document.getElementById('workoutPlan').value = data.workout_plan;
+                document.getElementById('aiPrompt').value = ''; // Clear prompt box
+            } catch (e) {
+                alert("Error generating workout.");
+            } finally {
+                document.getElementById('workoutLoading').style.display = 'none';
+            }
+        }
+
+        // Wrapper to pass the text input to the generator
+        function adjustWorkout() {
+            const prompt = document.getElementById('aiPrompt').value;
+            if(!prompt) return alert("Enter an adjustment prompt first.");
+            generateWorkout(prompt);
+        }
+
+        // Fast save route for manual text edits
+        async function saveWorkout() {
+            if(!apiKey.value) return;
+            const currentText = document.getElementById('workoutPlan').value;
+            try {
+                await fetch('/api/v1/save-manual-workout', {
+                    method: 'POST', headers: { 'X-API-Key': apiKey.value, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ plan: currentText })
+                });
+                const status = document.getElementById('saveStatus');
+                status.style.display = 'block';
+                setTimeout(() => status.style.display = 'none', 3000);
+            } catch(e) { alert("Failed to save."); }
+        }
+
+        // Run initialization on load
+        if(apiKey.value) {
+            fetchCachedAdvice();
+            fetchCurrentWorkout();
         }
     </script>
 </body>

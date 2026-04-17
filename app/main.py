@@ -2,8 +2,11 @@ from fastapi import FastAPI, Depends, HTTPException, Header, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from apscheduler.schedulers.background import BackgroundScheduler
+from pydantic import BaseModel
 import os
 import logging
+from database import write_metric, log_food_to_sqlite, get_food_log_from_sqlite, get_todays_advice, get_trailing_7_days, save_journal, get_recent_journal, save_workout_plan, get_todays_workout_plan, get_todays_macros, update_food_in_sqlite, save_ai_advice
+from gemini_ai import estimate_macros_from_image, estimate_macros_from_text, generate_workout_plan, generate_next_meal_recommendation, coach_chat, generate_daily_advice
 
 # FIX 1: Added FoodEditRequest and ChatRequest to the imports
 from models import AppleHealthData, ManualEntryData, MacroData, TextFoodRequest, WorkoutRequest, DailyJournal, FoodEditRequest, ChatRequest
@@ -142,6 +145,22 @@ def get_food_history(page: int = 1, limit: int = 10):
 def serve_daily_advice():
     return {"advice": get_todays_advice()}
 
+@app.post("/api/v1/force-advice", dependencies=[Depends(verify_api_key)])
+def generate_fresh_advice():
+    # 1. Grab the latest data from InfluxDB
+    data_summary = get_trailing_7_days()
+    
+    if not data_summary:
+        return {"advice": "No data found for the last 7 days. Sync Apple Health first!"}
+    
+    # 2. Force the AI to generate a new analysis
+    advice = generate_daily_advice(data_summary)
+    
+    # 3. Overwrite the old cached error in SQLite with the new advice
+    save_ai_advice(advice)
+    
+    return {"advice": advice}
+
 @app.post("/api/v1/journal", dependencies=[Depends(verify_api_key)])
 def ingest_journal(data: DailyJournal):
     save_journal(data.soreness, data.energy, data.vball_hours, data.vball_intensity, data.notes)
@@ -169,3 +188,12 @@ def edit_food_history(req: FoodEditRequest):
 def chat_with_coach(req: ChatRequest):
     reply = coach_chat(req.message, req.history)
     return {"reply": reply}
+
+class ManualWorkoutSave(BaseModel):
+    plan: str
+
+@app.post("/api/v1/save-manual-workout", dependencies=[Depends(verify_api_key)])
+def save_manual_workout(req: ManualWorkoutSave):
+    # Reuses your existing database function to save the text
+    save_workout_plan(req.plan)
+    return {"status": "success"}
